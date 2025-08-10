@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Sommelier — демо</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#111827">
+  <style>
+    :root { --bg:#f9fafb; --fg:#111827; --muted:#6b7280; --card:#ffffff; --accent:#374151; }
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial}
+    header{position:sticky;top:0;background:var(--card);border-bottom:1px solid #e5e7eb;padding:12px 16px}
+    h1{margin:0;font-size:20px}
+    .wrap{max-width:840px;margin:0 auto;padding:16px}
+    .card{background:var(--card);border:1px solid #e5e7eb;border-radius:16px;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.04); margin-bottom:16px}
+    label{display:block;margin:8px 0 4px;color:var(--muted);font-size:14px}
+    input,select,button,textarea{width:100%;padding:12px;border-radius:12px;border:1px solid #e5e7eb;background:white;font-size:16px}
+    button{background:#111827;color:white;border:none;font-weight:600;cursor:pointer}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    .row{display:grid;gap:12px}
+    @media(min-width:720px){ .row{grid-template-columns:1fr 1fr} }
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    th,td{padding:8px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:top}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#eef2ff;color:#3730a3;font-size:12px;margin-left:6px}
+    .muted{color:var(--muted)}
+    .sources a{word-break:break-all}
+    footer{padding:40px 16px;color:var(--muted);text-align:center}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Sommelier — демо (без сервера)</h1>
+  </header>
+  <div class="wrap">
+    <div class="card">
+      <p class="muted">Это упрощённый офлайн‑демо. Он показывает, как будет выглядеть приложение. Данные — примеры.</p>
+      <div class="row">
+        <div>
+          <label>Ввести название вина</label>
+          <input id="wineName" placeholder="Например: Barolo DOCG Vietti Castiglione 2018">
+        </div>
+        <div>
+          <label>Загрузить фото/файл (не обяз.)</label>
+          <input id="fileInput" type="file" accept="image/*,.pdf,.xls,.xlsx" multiple>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <div>
+          <label>Тип запроса</label>
+          <select id="mode">
+            <option value="single">1 позиция</option>
+            <option value="few">2–5 позиций</option>
+            <option value="many">{'>'}5 позиций (группировка)</option>
+          </select>
+        </div>
+        <div style="align-self:end">
+          <button id="analyzeBtn">Проанализировать</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="output"></div>
+
+    <footer>Установите как приложение: Откройте эту страницу по ссылке в браузере телефона → «Поделиться/Меню» → «На экран домой».</footer>
+  </div>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(console.error);
+      });
+    }
+
+    const mockWines = [
+      {
+        title: "Vietti Barolo Castiglione, 2018 — Пьемонт, Италия",
+        profile: "Красное, сухое; вишня, смородина, кожа; дубовая выдержка (подтверждение требуется).",
+        ratings: [
+          { name:"Vivino", value:"4.2 (6 100 отзывов)", url:"https://www.vivino.com/", date:"2025-08-09" }
+        ],
+        prices: {
+          ru: { range:"4 500–6 000 ₽", links:[["SimpleWine","#"],["Winestyle","#"]], date:"2025-08-09" },
+          eu: { country:"Италия", range:"€22–28", links:[["Tannico","#"]], date:"2025-08-09" }
+        },
+        serving: "16–18 °C; декантирование 30–60 мин; бокал Бордо.",
+        pairing: "Стейки, тушёная телятина, выдержанные сыры.",
+        sources: [
+          ["Vivino","рейтинг и ссылка на страницу вина","2025-08-09","https://www.vivino.com/"],
+          ["Ритейлеры РФ","диапазон цен из 2 магазинов","2025-08-09","#"]
+        ]
+      },
+      {
+        title: "Chablis Premier Cru, 2021 — Бургундия, Франция",
+        profile: "Белое, сухое; зелёное яблоко, лимон, кремнёвые ноты.",
+        ratings: [
+          { name:"Vivino", value:"4.0 (1 200)", url:"https://www.vivino.com/", date:"2025-08-09" }
+        ],
+        prices: {
+          ru: { range:"3 000–4 200 ₽", links:[["SimpleWine","#"]], date:"2025-08-09" },
+          eu: { country:"Франция", range:"€24–32", links:[["Millesima","#"]], date:"2025-08-09" }
+        },
+        serving: "8–10 °C; без деканта; бокал юниверсал.",
+        pairing: "Устрицы, рыба на гриле, козий сыр.",
+        sources: [["Vivino","рейтинг","2025-08-09","https://www.vivino.com/"]]
+      },
+      {
+        title: "Malbec, 2020 — Мендоса, Аргентина",
+        profile: "Красное; слива, тёмные ягоды, шоколад.",
+        ratings: [{ name:"Vivino", value:"4.1 (9 500)", url:"https://www.vivino.com/", date:"2025-08-09" }],
+        prices: {
+          ru: { range:"2 000–3 000 ₽", links:[["Winestyle","#"]], date:"2025-08-09" },
+          eu: { country:"Германия", range:"€9–13", links:[["Hawesko","#"]], date:"2025-08-09" }
+        },
+        serving: "16–18 °C; декант 20 мин; бокал Бордо.",
+        pairing: "Бургер, ягнятина, твёрдые сыры.",
+        sources: [["Vivino","рейтинг","2025-08-09","https://www.vivino.com/"]]
+      }
+    ];
+
+    const elOut = document.getElementById('output');
+    document.getElementById('analyzeBtn').addEventListener('click', () => {
+      const mode = document.getElementById('mode').value;
+      const name = document.getElementById('wineName').value.trim();
+      render(mode, name);
+    });
+
+    function render(mode, name){
+      elOut.innerHTML = "";
+      if(mode === "single"){
+        renderCard(mockWines[0]);
+      } else if (mode === "few"){
+        renderComparer(mockWines.slice(0,3));
+        mockWines.slice(0,3).forEach(renderCard);
+      } else {
+        renderManyGroups();
+      }
+      window.scrollTo({top:document.body.scrollHeight, behavior:'smooth'});
+    }
+
+    function renderComparer(wines){
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = '<h2>Мини‑сравнитель</h2>' +
+        '<div class="muted" style="margin-bottom:8px">Тестовые данные</div>' +
+        '<div class="table"></div>';
+      const tbl = document.createElement('table');
+      tbl.innerHTML = '<thead><tr><th>№</th><th>Название</th><th>Стиль</th><th>Страна/Регион</th><th>Винтаж</th><th>Vivino</th><th>Цена РФ</th></tr></thead>';
+      const tb = document.createElement('tbody');
+      wines.forEach((w,i)=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${i+1}</td><td>${w.title}</td><td>${w.title.includes("Белое")?"Белое":"Красное"}</td><td>${w.title.split("—").pop().trim()}</td><td>${(w.title.match(/\b(19|20)\d{2}\b/)||["—"])[0]}</td><td>${w.ratings[0].value}</td><td>${w.prices.ru.range}</td>`;
+        tb.appendChild(tr);
+      });
+      tbl.appendChild(tb);
+      card.querySelector('.table').appendChild(tbl);
+      elOut.appendChild(card);
+    }
+
+    function renderCard(data){
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <h2 style="margin:0 0 8px 0">${data.title}</h2>
+        <div class="muted" style="margin-bottom:12px">Карточка вина (демо)</div>
+        <div style="margin-bottom:8px"><strong>Профиль:</strong> ${data.profile}</div>
+        <div style="margin-bottom:8px"><strong>Рейтинги:</strong>
+          <ul>${data.ratings.map(r=>`<li>${r.name}: ${r.value} — <a href="${r.url}" target="_blank">ссылка</a> — ${r.date}</li>`).join("")}</ul>
+        </div>
+        <div class="row">
+          <div>
+            <strong>Цены — Россия:</strong>
+            <div>${data.prices.ru.range} <span class="muted">(${data.prices.ru.date})</span></div>
+            <ul>${data.prices.ru.links.map(([n,u])=>`<li><a href="${u}" target="_blank">${n}</a></li>`).join("")}</ul>
+          </div>
+          <div>
+            <strong>Цены — Европа (${data.prices.eu.country}):</strong>
+            <div>${data.prices.eu.range} <span class="muted">(${data.prices.eu.date})</span></div>
+            <ul>${data.prices.eu.links.map(([n,u])=>`<li><a href="${u}" target="_blank">${n}</a></li>`).join("")}</ul>
+          </div>
+        </div>
+        <div style="margin-top:8px"><strong>Подача:</strong> ${data.serving}</div>
+        <div style="margin-top:8px"><strong>Гастропары:</strong> ${data.pairing}</div>
+        <div style="margin-top:12px" class="sources"><strong>Источники:</strong>
+          <ul>${data.sources.map(s=>`<li>${s[0]} — ${s[1]} — ${s[2]} — <a href="${s[3]}" target="_blank">${s[3]}</a></li>`).join("")}</ul>
+        </div>
+      `;
+      elOut.appendChild(card);
+    }
+
+    function renderManyGroups(){
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <h2>Общая характеристика карты</h2>
+        <p>Красных 60%, белых 30%, игристых 10%. География: Италия, Франция, Аргентина, Испания. Цены: 1 200–8 500 ₽.</p>
+        <h3>Группы</h3>
+        <ol>
+          <li>Красные — Италия, 3 500–6 000 ₽</li>
+          <li>Белые — Франция, 2 800–5 200 ₽</li>
+          <li>Красные — Аргентина, 2 000–3 200 ₽</li>
+          <li>Игристые — Франция, 5 000–8 500 ₽</li>
+        </ol>
+        <p class="muted">В реальном приложении здесь появится вопрос «О каких группах рассказать подробнее?»</p>
+      `;
+      elOut.appendChild(card);
+    }
+  </script>
+</body>
+</html>
