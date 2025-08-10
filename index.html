@@ -2,9 +2,8 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <base href="/Sommelier/"> <link rel="manifest" href="/Sommelier/manifest.json">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Sommelier — демо</title>
+  <title>Sommelier — демо v3 (OCR + ссылки + PDF)</title>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#111827">
   <style>
@@ -12,37 +11,46 @@
     *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial}
     header{position:sticky;top:0;background:var(--card);border-bottom:1px solid #e5e7eb;padding:12px 16px}
     h1{margin:0;font-size:20px}
-    .wrap{max-width:840px;margin:0 auto;padding:16px}
+    .wrap{max-width:880px;margin:0 auto;padding:16px}
     .card{background:var(--card);border:1px solid #e5e7eb;border-radius:16px;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.04); margin-bottom:16px}
     label{display:block;margin:8px 0 4px;color:var(--muted);font-size:14px}
     input,select,button,textarea{width:100%;padding:12px;border-radius:12px;border:1px solid #e5e7eb;background:white;font-size:16px}
     button{background:#111827;color:white;border:none;font-weight:600;cursor:pointer}
+    button.ghost{background:#eef2ff;color:#111827}
     button:disabled{opacity:.6;cursor:not-allowed}
     .row{display:grid;gap:12px}
     @media(min-width:720px){ .row{grid-template-columns:1fr 1fr} }
     table{width:100%;border-collapse:collapse;font-size:14px}
     th,td{padding:8px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:top}
-    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#eef2ff;color:#3730a3;font-size:12px;margin-left:6px}
     .muted{color:var(--muted)}
     .sources a{word-break:break-all}
+    .hint{font-size:13px;color:var(--muted);margin-top:6px}
+    .progress{height:8px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin-top:8px}
+    .bar{height:100%;width:0;background:#16a34a;transition:width .2s}
+    .btnrow{display:flex;gap:8px;flex-wrap:wrap}
     footer{padding:40px 16px;color:var(--muted);text-align:center}
   </style>
+  <script src="https://unpkg.com/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 </head>
 <body>
   <header>
-    <h1>Sommelier — демо (без сервера)</h1>
+    <h1>Sommelier — демо v3 (OCR + ссылки + PDF)</h1>
   </header>
   <div class="wrap">
     <div class="card">
-      <p class="muted">Это упрощённый офлайн‑демо. Он показывает, как будет выглядеть приложение. Данные — примеры.</p>
+      <p class="muted">Теперь: (1) распознаём текст с этикетки на телефоне, (2) собираем ссылки, (3) сохраняем PDF с карточками.</p>
       <div class="row">
         <div>
           <label>Ввести название вина</label>
           <input id="wineName" placeholder="Например: Barolo DOCG Vietti Castiglione 2018">
+          <div class="hint">После загрузки фото сюда автоматически попадёт распознанный текст (можно подредактировать).</div>
         </div>
         <div>
-          <label>Загрузить фото/файл (не обяз.)</label>
-          <input id="fileInput" type="file" accept="image/*,.pdf,.xls,.xlsx" multiple>
+          <label>Загрузить фото этикетки</label>
+          <input id="fileInput" type="file" accept="image/*" capture="environment">
+          <div class="progress" id="ocrProg" style="display:none"><div class="bar" id="ocrBar"></div></div>
+          <div class="hint" id="ocrHint"></div>
         </div>
       </div>
       <div class="row" style="margin-top:12px">
@@ -54,23 +62,103 @@
             <option value="many">{'>'}5 позиций (группировка)</option>
           </select>
         </div>
-        <div style="align-self:end">
-          <button id="analyzeBtn">Проанализировать</button>
+        <div class="btnrow" style="align-items:end">
+          <button id="analyzeBtn">Показать карточки</button>
+          <button class="ghost" id="collectBtn">Собрать ссылки сейчас</button>
+          <button class="ghost" id="pdfBtn">Сохранить PDF</button>
         </div>
       </div>
+      <div class="hint">Ссылки строятся как умные поисковые запросы в Google по Vivino и магазинам РФ/ЕС — это законно и быстро.</div>
     </div>
 
+    <div id="linksBox"></div>
     <div id="output"></div>
 
-    <footer>Установите как приложение: Откройте эту страницу по ссылке в браузере телефона → «Поделиться/Меню» → «На экран домой».</footer>
+    <footer>Установка: открой страницу в браузере телефона → «Поделиться/Меню» → «На экран домой».</footer>
   </div>
 
   <script>
     if ('serviceWorker' in navigator) {
-navigator.serviceWorker.register('/Sommelier/sw.js', { scope: '/Sommelier/' })
-.catch(console.error);
-}
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(console.error);
+      });
+    }
 
+    const elOut  = document.getElementById('output');
+    const elName = document.getElementById('wineName');
+    const elFile = document.getElementById('fileInput');
+    const elProg = document.getElementById('ocrProg');
+    const elBar  = document.getElementById('ocrBar');
+    const elHint = document.getElementById('ocrHint');
+    const elLinks= document.getElementById('linksBox');
+
+    elFile.addEventListener('change', async (e)=>{
+      const file = e.target.files[0];
+      if(!file) return;
+      elProg.style.display = 'block';
+      elHint.textContent = 'Распознаю текст на этикетке…';
+      elBar.style.width = '5%';
+      try{
+        const worker = await Tesseract.createWorker('eng+rus', 1);
+        worker.on('progress', p=>{
+          elBar.style.width = Math.round((p.progress || 0)*100)+'%';
+        });
+        const { data } = await worker.recognize(file);
+        await worker.terminate();
+        elProg.style.display = 'none';
+        const text = (data.text || '').replace(/\s+/g,' ').trim();
+        if(text){
+          elName.value = text.slice(0, 160);
+          elHint.textContent = 'Готово. Проверь правильность и отредактируй при необходимости.';
+        }else{
+          elHint.textContent = 'Не удалось прочитать текст. Попробуй более чёткое фото.';
+        }
+      }catch(err){
+        console.error(err);
+        elProg.style.display = 'none';
+        elHint.textContent = 'Ошибка OCR. Попробуй снова или введи название вручную.';
+      }
+    });
+
+    document.getElementById('collectBtn').addEventListener('click', ()=>{
+      elLinks.innerHTML = '';
+      const q = elName.value.trim();
+      if(!q){ 
+        const warn = document.createElement('div');
+        warn.className='card'; warn.textContent='Сначала введите название вина или распознайте с фото.';
+        elLinks.appendChild(warn);
+        return;
+      }
+      const enc = encodeURIComponent(q);
+      const items = [
+        ['Vivino — поиск по вину', `https://www.google.com/search?q=site%3Avivino.com+${enc}`],
+        ['РФ — SimpleWine/Winestyle', `https://www.google.com/search?q=${enc}+site%3Asimplewine.ru+OR+site%3Awinestyle.ru`],
+        ['Италия — Tannico/Callmewine', `https://www.google.com/search?q=${enc}+site%3Atannico.it+OR+site%3Acallmewine.com`],
+        ['Франция — Millesima/Lavinia', `https://www.google.com/search?q=${enc}+site%3Amillesima.com+OR+site%3Alavinia.fr`],
+        ['Германия — Hawesko/Belvini', `https://www.google.com/search?q=${enc}+site%3Ahawesko.de+OR+site%3Abelvini.de`],
+        ['Великобритания — TheWineSociety/Majestic', `https://www.google.com/search?q=${enc}+site%3Athewinesociety.com+OR+site%3Amajestic.co.uk`],
+      ];
+      const card = document.createElement('div');
+      card.className='card';
+      card.innerHTML = '<h2>Подобранные ссылки</h2>';
+      const ul = document.createElement('ul');
+      items.forEach(([name, url])=>{
+        const li = document.createElement('li');
+        li.innerHTML = `<a target="_blank" href="${url}">${name}</a>`;
+        ul.appendChild(li);
+      });
+      card.appendChild(ul);
+      elLinks.appendChild(card);
+      window.scrollTo({top:document.body.scrollHeight, behavior:'smooth'});
+    });
+
+    document.getElementById('analyzeBtn').addEventListener('click', () => {
+      const mode = document.getElementById('mode').value;
+      const query = elName.value.trim();
+      render(mode, query);
+    });
+
+    // MOCK данные (как раньше)
     const mockWines = [
       {
         title: "Vietti Barolo Castiglione, 2018 — Пьемонт, Италия",
@@ -117,14 +205,7 @@ navigator.serviceWorker.register('/Sommelier/sw.js', { scope: '/Sommelier/' })
       }
     ];
 
-    const elOut = document.getElementById('output');
-    document.getElementById('analyzeBtn').addEventListener('click', () => {
-      const mode = document.getElementById('mode').value;
-      const name = document.getElementById('wineName').value.trim();
-      render(mode, name);
-    });
-
-    function render(mode, name){
+    function render(mode, query){
       elOut.innerHTML = "";
       if(mode === "single"){
         renderCard(mockWines[0]);
@@ -140,6 +221,7 @@ navigator.serviceWorker.register('/Sommelier/sw.js', { scope: '/Sommelier/' })
     function renderComparer(wines){
       const card = document.createElement('div');
       card.className = 'card';
+      card.setAttribute('data-card','comparer');
       card.innerHTML = '<h2>Мини‑сравнитель</h2>' +
         '<div class="muted" style="margin-bottom:8px">Тестовые данные</div>' +
         '<div class="table"></div>';
@@ -159,6 +241,7 @@ navigator.serviceWorker.register('/Sommelier/sw.js', { scope: '/Sommelier/' })
     function renderCard(data){
       const card = document.createElement('div');
       card.className = 'card';
+      card.setAttribute('data-card','wine');
       card.innerHTML = `
         <h2 style="margin:0 0 8px 0">${data.title}</h2>
         <div class="muted" style="margin-bottom:12px">Карточка вина (демо)</div>
@@ -190,6 +273,7 @@ navigator.serviceWorker.register('/Sommelier/sw.js', { scope: '/Sommelier/' })
     function renderManyGroups(){
       const card = document.createElement('div');
       card.className = 'card';
+      card.setAttribute('data-card','groups');
       card.innerHTML = `
         <h2>Общая характеристика карты</h2>
         <p>Красных 60%, белых 30%, игристых 10%. География: Италия, Франция, Аргентина, Испания. Цены: 1 200–8 500 ₽.</p>
@@ -200,10 +284,36 @@ navigator.serviceWorker.register('/Sommelier/sw.js', { scope: '/Sommelier/' })
           <li>Красные — Аргентина, 2 000–3 200 ₽</li>
           <li>Игристые — Франция, 5 000–8 500 ₽</li>
         </ol>
-        <p class="muted">В реальном приложении здесь появится вопрос «О каких группах рассказать подробнее?»</p>
       `;
       elOut.appendChild(card);
     }
+
+    document.getElementById('pdfBtn').addEventListener('click', async ()=>{
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ unit:'pt', format:'a4' });
+      const margin = 36;
+      let y = margin;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
+      doc.text('Sommelier — карточки (демо)', margin, y); y+=20;
+      doc.setFont('helvetica','');
+      const cards = document.querySelectorAll('[data-card]');
+      cards.forEach((card, idx)=>{
+        const title = card.querySelector('h2')?.textContent || 'Карточка';
+        doc.setFont('helvetica','bold'); doc.text(title, margin, y); y+=16;
+        doc.setFont('helvetica',''); 
+        doc.setFontSize(11);
+        const text = card.innerText.replace(/\n{2,}/g, '\n').trim();
+        const lines = doc.splitTextToSize(text, 522);
+        for(const line of lines){
+          if(y > 806){ doc.addPage(); y = margin; }
+          doc.text(line, margin, y);
+          y += 14;
+        }
+        y += 10;
+        if(y > 806 && idx < cards.length-1){ doc.addPage(); y = margin; }
+      });
+      doc.save('sommelier_cards_demo.pdf');
+    });
   </script>
 </body>
 </html>
