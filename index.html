@@ -3,21 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Sommelier — демо v3.1</title>
-  <!-- Use relative paths so it works under https://user.github.io/repo/ -->
+  <title>Sommelier — v4 (реальные ссылки + коллекция)</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <meta name="theme-color" content="#111827">
   <style>
     :root { --bg:#f9fafb; --fg:#111827; --muted:#6b7280; --card:#ffffff; --accent:#374151; }
     *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial}
-    header{position:sticky;top:0;background:var(--card);border-bottom:1px solid #e5e7eb;padding:12px 16px}
+    header{position:sticky;top:0;background:var(--card);border-bottom:1px solid #e5e7eb;padding:12px 16px;z-index:10}
     h1{margin:0;font-size:20px}
-    .wrap{max-width:880px;margin:0 auto;padding:16px}
-    .card{background:var(--card);border:1px solid #e5e7eb;border-radius:16px;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.04); margin-bottom:16px}
+    .wrap{max-width:1000px;margin:0 auto;padding:16px}
+    .grid{display:grid;gap:16px}
+    @media(min-width:980px){ .grid{grid-template-columns:1.4fr 1fr} }
+    .card{background:var(--card);border:1px solid #e5e7eb;border-radius:16px;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.04); margin-bottom:0}
     label{display:block;margin:8px 0 4px;color:var(--muted);font-size:14px}
     input,select,button,textarea{width:100%;padding:12px;border-radius:12px;border:1px solid #e5e7eb;background:white;font-size:16px}
+    textarea{min-height:64px;resize:vertical}
     button{background:#111827;color:white;border:none;font-weight:600;cursor:pointer}
     button.ghost{background:#eef2ff;color:#111827}
+    button.warn{background:#b91c1c}
     button:disabled{opacity:.6;cursor:not-allowed}
     .row{display:grid;gap:12px}
     @media(min-width:720px){ .row{grid-template-columns:1fr 1fr} }
@@ -30,70 +33,142 @@
     .bar{height:100%;width:0;background:#16a34a;transition:width .2s}
     .btnrow{display:flex;gap:8px;flex-wrap:wrap}
     footer{padding:40px 16px;color:var(--muted);text-align:center}
+    .list-item{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #e5e7eb}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#eef2ff;color:#3730a3;font-size:12px;margin-left:6px}
   </style>
   <script src="https://unpkg.com/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 </head>
 <body>
   <header>
-    <h1>Sommelier — демо v3.1 (фикс 404)</h1>
+    <h1>Sommelier — v4 (реальные ссылки + локальная коллекция)</h1>
   </header>
-  <div class="wrap">
-    <div class="card">
-      <p class="muted">Эта версия исправляет 404 после «Добавить на экран Домой» на GitHub Pages (поддержка подкаталога).</p>
-      <div class="row">
-        <div>
-          <label>Ввести название вина</label>
-          <input id="wineName" placeholder="Например: Barolo DOCG Vietti Castiglione 2018">
-          <div class="hint">После загрузки фото сюда автоматически попадёт распознанный текст (можно подредактировать).</div>
+  <div class="wrap grid">
+    <div>
+      <div class="card">
+        <p class="muted">Шаги: (1) сфотографируй этикетку или введи название, (2) собери ссылки, (3) при желании — **внеси реальные ссылки** и сохрани в коллекцию.</p>
+        <div class="row">
+          <div>
+            <label>Название/текст с этикетки</label>
+            <input id="wineName" placeholder="Например: Barolo DOCG Vietti Castiglione 2018">
+          </div>
+          <div>
+            <label>Фото этикетки (OCR на устройстве)</label>
+            <input id="fileInput" type="file" accept="image/*" capture="environment">
+            <div class="progress" id="ocrProg" style="display:none"><div class="bar" id="ocrBar"></div></div>
+            <div class="hint" id="ocrHint"></div>
+          </div>
         </div>
-        <div>
-          <label>Загрузить фото этикетки</label>
-          <input id="fileInput" type="file" accept="image/*" capture="environment">
-          <div class="progress" id="ocrProg" style="display:none"><div class="bar" id="ocrBar"></div></div>
-          <div class="hint" id="ocrHint"></div>
+        <div class="row" style="margin-top:12px">
+          <div>
+            <label>Тип запроса</label>
+            <select id="mode">
+              <option value="single">1 позиция</option>
+              <option value="few">2–5 позиций</option>
+              <option value="many">{'>'}5 позиций (группировка)</option>
+            </select>
+          </div>
+          <div class="btnrow" style="align-items:end">
+            <button id="analyzeBtn">Показать карточки (демо)</button>
+            <button class="ghost" id="collectBtn">Собрать ссылки сейчас</button>
+            <button class="ghost" id="pdfBtn">Сохранить PDF</button>
+          </div>
         </div>
       </div>
-      <div class="row" style="margin-top:12px">
-        <div>
-          <label>Тип запроса</label>
-          <select id="mode">
-            <option value="single">1 позиция</option>
-            <option value="few">2–5 позиций</option>
-            <option value="many">{'>'}5 позиций (группировка)</option>
-          </select>
-        </div>
-        <div class="btnrow" style="align-items:end">
-          <button id="analyzeBtn">Показать карточки</button>
-          <button class="ghost" id="collectBtn">Собрать ссылки сейчас</button>
-          <button class="ghost" id="pdfBtn">Сохранить PDF</button>
-        </div>
-      </div>
-      <div class="hint">Если установлено как приложение и открывается 404 — обновите приложение: удалите иконку и поставьте заново, уже с этой версией.</div>
+
+      <div id="linksBox"></div>
+      <div id="output"></div>
     </div>
 
-    <div id="linksBox"></div>
-    <div id="output"></div>
+    <div>
+      <div class="card">
+        <h3 style="margin-top:0">Реальные данные → в коллекцию</h3>
+        <label>Заголовок карточки (как будет видно на экране)</label>
+        <input id="titleInp" placeholder="Vietti Barolo Castiglione, 2018 — Пьемонт, Италия">
 
-    <footer>Установка: открой страницу в браузере телефона → «Поделиться/Меню» → «На экран домой».</footer>
+        <label>Vivino (ссылка) и рейтинг</label>
+        <input id="vivinoUrl" placeholder="https://www.vivino.com/...">
+        <input id="vivinoScore" placeholder="например: 4.2 (6100 отзывов)">
+
+        <div class="row">
+          <div>
+            <label>Россия — ссылки на магазины (по одной в строке)</label>
+            <textarea id="ruLinks" placeholder="https://simplewine.ru/...&#10;https://winestyle.ru/..."></textarea>
+          </div>
+          <div>
+            <label>Европа — страна и ссылки</label>
+            <input id="euCountry" placeholder="Италия / Германия / Великобритания">
+            <textarea id="euLinks" placeholder="https://tannico.it/...&#10;https://hawesko.de/..."></textarea>
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label>Диапазон цен РФ</label>
+            <input id="ruRange" placeholder="например: 4500–6000 ₽">
+          </div>
+          <div>
+            <label>Диапазон цен Европа</label>
+            <input id="euRange" placeholder="например: €22–28">
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label>Подача (t°, декант, бокал)</label>
+            <input id="serve" placeholder="16–18 °C; декант 30–60 мин; бокал Бордо">
+          </div>
+          <div>
+            <label>Гастропары (через запятую)</label>
+            <input id="pair" placeholder="стейки, тушёная телятина, выдержанные сыры">
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label>Дата обращения (авто)</label>
+            <input id="dateInp" disabled>
+          </div>
+          <div class="btnrow" style="align-items:end">
+            <button id="saveBtn">Добавить в коллекцию</button>
+            <button class="ghost" id="clearFormBtn">Очистить форму</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">Моя коллекция</h3>
+        <div class="btnrow" style="margin-bottom:8px">
+          <button class="ghost" id="exportBtn">Экспорт JSON</button>
+          <input id="importFile" type="file" accept="application/json" style="display:none">
+          <button class="ghost" id="importBtn">Импорт JSON</button>
+          <button class="warn" id="wipeBtn">Удалить всё</button>
+        </div>
+        <div id="listBox"></div>
+      </div>
+    </div>
   </div>
 
+  <footer>Установка: открой страницу в браузере телефона → «Поделиться/Меню» → «На экран домой».</footer>
+
   <script>
-    // Register SW using a relative URL so scope matches the repo subpath
+    // SW registration (relative paths to work under /REPO/)
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js').catch(console.error);
       });
     }
 
-    const elOut  = document.getElementById('output');
-    const elName = document.getElementById('wineName');
-    const elFile = document.getElementById('fileInput');
-    const elProg = document.getElementById('ocrProg');
-    const elBar  = document.getElementById('ocrBar');
-    const elHint = document.getElementById('ocrHint');
-    const elLinks= document.getElementById('linksBox');
+    // Helpers
+    const today = ()=>{
+      const d = new Date();
+      return d.toISOString().slice(0,10);
+    }
+    const el = (id)=>document.getElementById(id);
 
+    // OCR handling
+    const elFile = el('fileInput'), elProg = el('ocrProg'), elBar = el('ocrBar'), elHint = el('ocrHint'), elName = el('wineName');
+    el('dateInp').value = today();
     elFile.addEventListener('change', async (e)=>{
       const file = e.target.files[0];
       if(!file) return;
@@ -102,35 +177,22 @@
       elBar.style.width = '5%';
       try{
         const worker = await Tesseract.createWorker('eng+rus', 1);
-        worker.on('progress', p=>{
-          elBar.style.width = Math.round((p.progress || 0)*100)+'%';
-        });
+        worker.on('progress', p=>{ elBar.style.width = Math.round((p.progress || 0)*100)+'%'; });
         const { data } = await worker.recognize(file);
         await worker.terminate();
         elProg.style.display = 'none';
         const text = (data.text || '').replace(/\s+/g,' ').trim();
-        if(text){
-          elName.value = text.slice(0, 160);
-          elHint.textContent = 'Готово. Проверь правильность и отредактируй при необходимости.';
-        }else{
-          elHint.textContent = 'Не удалось прочитать текст. Попробуй более чёткое фото.';
-        }
-      }catch(err){
-        console.error(err);
-        elProg.style.display = 'none';
-        elHint.textContent = 'Ошибка OCR. Попробуй снова или введи название вручную.';
-      }
+        if(text){ elName.value = text.slice(0, 160); elHint.textContent = 'Готово. Проверь правильность.'; }
+        else { elHint.textContent = 'Не удалось прочитать. Попробуй другое фото.'; }
+      }catch(err){ console.error(err); elProg.style.display='none'; elHint.textContent='Ошибка OCR.'; }
     });
 
-    document.getElementById('collectBtn').addEventListener('click', ()=>{
-      elLinks.innerHTML = '';
-      const q = elName.value.trim();
-      if(!q){ 
-        const warn = document.createElement('div');
-        warn.className='card'; warn.textContent='Сначала введите название вина или распознайте с фото.';
-        elLinks.appendChild(warn);
-        return;
-      }
+    // Build quick links
+    el('collectBtn').addEventListener('click', ()=>{
+      const box = document.getElementById('linksBox');
+      box.innerHTML = '';
+      const q = el('wineName').value.trim();
+      if(!q){ box.innerHTML = '<div class="card">Сначала введите название вина или распознайте с фото.</div>'; return; }
       const enc = encodeURIComponent(q);
       const items = [
         ['Vivino — поиск по вину', `https://www.google.com/search?q=site%3Avivino.com+${enc}`],
@@ -140,182 +202,158 @@
         ['Германия — Hawesko/Belvini', `https://www.google.com/search?q=${enc}+site%3Ahawesko.de+OR+site%3Abelvini.de`],
         ['Великобритания — TheWineSociety/Majestic', `https://www.google.com/search?q=${enc}+site%3Athewinesociety.com+OR+site%3Amajestic.co.uk`],
       ];
-      const card = document.createElement('div');
-      card.className='card';
-      card.innerHTML = '<h2>Подобранные ссылки</h2>';
+      const card = document.createElement('div'); card.className='card';
+      card.innerHTML = '<h3 style="margin-top:0">Подобранные ссылки</h3>';
       const ul = document.createElement('ul');
       items.forEach(([name, url])=>{
-        const li = document.createElement('li');
-        li.innerHTML = `<a target="_blank" href="${url}">${name}</a>`;
-        ul.appendChild(li);
+        const li = document.createElement('li'); li.innerHTML = `<a target="_blank" href="${url}">${name}</a>`; ul.appendChild(li);
       });
-      card.appendChild(ul);
-      elLinks.appendChild(card);
+      card.appendChild(ul); box.appendChild(card);
       window.scrollTo({top:document.body.scrollHeight, behavior:'smooth'});
     });
 
-    document.getElementById('analyzeBtn').addEventListener('click', () => {
-      const mode = document.getElementById('mode').value;
-      const query = elName.value.trim();
-      render(mode, query);
-    });
-
-    // MOCK данные
-    const mockWines = [
-      {
-        title: "Vietti Barolo Castiglione, 2018 — Пьемонт, Италия",
-        profile: "Красное, сухое; вишня, смородина, кожа; дубовая выдержка (подтверждение требуется).",
-        ratings: [
-          { name:"Vivino", value:"4.2 (6 100 отзывов)", url:"https://www.vivino.com/", date:"2025-08-09" }
-        ],
-        prices: {
-          ru: { range:"4 500–6 000 ₽", links:[["SimpleWine","#"],["Winestyle","#"]], date:"2025-08-09" },
-          eu: { country:"Италия", range:"€22–28", links:[["Tannico","#"]], date:"2025-08-09" }
-        },
-        serving: "16–18 °C; декантирование 30–60 мин; бокал Бордо.",
-        pairing: "Стейки, тушёная телятина, выдержанные сыры.",
-        sources: [
-          ["Vivino","рейтинг и ссылка на страницу вина","2025-08-09","https://www.vivino.com/"],
-          ["Ритейлеры РФ","диапазон цен из 2 магазинов","2025-08-09","#"]
-        ]
-      },
-      {
-        title: "Chablis Premier Cru, 2021 — Бургундия, Франция",
-        profile: "Белое, сухое; зелёное яблоко, лимон, кремнёвые ноты.",
-        ratings: [
-          { name:"Vivino", value:"4.0 (1 200)", url:"https://www.vivino.com/", date:"2025-08-09" }
-        ],
-        prices: {
-          ru: { range:"3 000–4 200 ₽", links:[["SimpleWine","#"]], date:"2025-08-09" },
-          eu: { country:"Франция", range:"€24–32", links:[["Millesima","#"]], date:"2025-08-09" }
-        },
-        serving: "8–10 °C; без деканта; бокал юниверсал.",
-        pairing: "Устрицы, рыба на гриле, козий сыр.",
-        sources: [["Vivino","рейтинг","2025-08-09","https://www.vivino.com/"]]
-      },
-      {
-        title: "Malbec, 2020 — Мендоса, Аргентина",
-        profile: "Красное; слива, тёмные ягоды, шоколад.",
-        ratings: [{ name:"Vivino", value:"4.1 (9 500)", url:"https://www.vivino.com/", date:"2025-08-09" }],
-        prices: {
-          ru: { range:"2 000–3 000 ₽", links:[["Winestyle","#"]], date:"2025-08-09" },
-          eu: { country:"Германия", range:"€9–13", links:[["Hawesko","#"]], date:"2025-08-09" }
-        },
-        serving: "16–18 °C; декант 20 мин; бокал Бордо.",
-        pairing: "Бургер, ягнятина, твёрдые сыры.",
-        sources: [["Vivino","рейтинг","2025-08-09","https://www.vivino.com/"]]
+    // Demo render (mock)
+    const mockWines=[
+      { title:"Vietti Barolo Castiglione, 2018 — Пьемонт, Италия", profile:"Красное, сухое; вишня, смородина, кожа; дубовая выдержка (подтверждение требуется).",
+        ratings:[{name:"Vivino",value:"4.2 (6 100 отзывов)",url:"https://www.vivino.com/",date:"2025-08-09"}],
+        prices:{ru:{range:"4 500–6 000 ₽",links:[["SimpleWine","#"],["Winestyle","#"]],date:"2025-08-09"},
+                eu:{country:"Италия",range:"€22–28",links:[["Tannico","#"]],date:"2025-08-09"}},
+        serving:"16–18 °C; декантирование 30–60 мин; бокал Бордо.", pairing:"Стейки, тушёная телятина, выдержанные сыры.",
+        sources:[["Vivino","рейтинг и ссылка на страницу вина","2025-08-09","https://www.vivino.com/"]]
       }
     ];
 
-    function render(mode, query){
-      elOut.innerHTML = "";
-      if(mode === "single"){
-        renderCard(mockWines[0]);
-      } else if (mode === "few"){
-        renderComparer(mockWines.slice(0,3));
-        mockWines.slice(0,3).forEach(renderCard);
-      } else {
-        renderManyGroups();
-      }
-      window.scrollTo({top:document.body.scrollHeight, behavior:'smooth'});
-    }
-
-    function renderComparer(wines){
+    function renderCard(container, data){
       const card = document.createElement('div');
-      card.className = 'card';
-      card.setAttribute('data-card','comparer');
-      card.innerHTML = '<h2>Мини‑сравнитель</h2>' +
-        '<div class="muted" style="margin-bottom:8px">Тестовые данные</div>' +
-        '<div class="table"></div>';
-      const tbl = document.createElement('table');
-      tbl.innerHTML = '<thead><tr><th>№</th><th>Название</th><th>Стиль</th><th>Страна/Регион</th><th>Винтаж</th><th>Vivino</th><th>Цена РФ</th></tr></thead>';
-      const tb = document.createElement('tbody');
-      wines.forEach((w,i)=>{
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${i+1}</td><td>${w.title}</td><td>${w.title.includes("Белое")?"Белое":"Красное"}</td><td>${w.title.split("—").pop().trim()}</td><td>${(w.title.match(/\b(19|20)\d{2}\b/)||["—"])[0]}</td><td>${w.ratings[0].value}</td><td>${w.prices.ru.range}</td>`;
-        tb.appendChild(tr);
-      });
-      tbl.appendChild(tb);
-      card.querySelector('.table').appendChild(tbl);
-      elOut.appendChild(card);
-    }
-
-    function renderCard(data){
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.setAttribute('data-card','wine');
+      card.className = 'card'; card.setAttribute('data-card','wine');
       card.innerHTML = `
-        <h2 style="margin:0 0 8px 0">${data.title}</h2>
-        <div class="muted" style="margin-bottom:12px">Карточка вина (демо)</div>
-        <div style="margin-bottom:8px"><strong>Профиль:</strong> ${data.profile}</div>
-        <div style="margin-bottom:8px"><strong>Рейтинги:</strong>
-          <ul>${data.ratings.map(r=>`<li>${r.name}: ${r.value} — <a href="${r.url}" target="_blank">ссылка</a> — ${r.date}</li>`).join("")}</ul>
-        </div>
+        <h2 style="margin:0 0 8px 0">${data.title || 'Без названия'}</h2>
+        <div class="muted" style="margin-bottom:12px">${data.demo?'Карточка вина (демо)':'Карточка вина (сохранённые данные)'}</div>
+        ${data.profile?`<div style="margin-bottom:8px"><strong>Профиль:</strong> ${data.profile}</div>`:''}
+        ${data.vivino?`<div style="margin-bottom:8px"><strong>Vivino:</strong> <a target="_blank" href="${data.vivino.url}">${data.vivino.url}</a> — ${data.vivino.score||''} — ${data.date||''}</div>`:''}
         <div class="row">
           <div>
             <strong>Цены — Россия:</strong>
-            <div>${data.prices.ru.range} <span class="muted">(${data.prices.ru.date})</span></div>
-            <ul>${data.prices.ru.links.map(([n,u])=>`<li><a href="${u}" target="_blank">${n}</a></li>`).join("")}</ul>
+            <div>${(data.ru&&data.ru.range)||'—'} ${data.date?`<span class="muted">(${data.date})</span>`:''}</div>
+            <ul>${(data.ru&&data.ru.links||[]).map(u=>`<li><a target="_blank" href="${u}">${u}</a></li>`).join("")}</ul>
           </div>
           <div>
-            <strong>Цены — Европа (${data.prices.eu.country}):</strong>
-            <div>${data.prices.eu.range} <span class="muted">(${data.prices.eu.date})</span></div>
-            <ul>${data.prices.eu.links.map(([n,u])=>`<li><a href="${u}" target="_blank">${n}</a></li>`).join("")}</ul>
+            <strong>Цены — Европа ${data.eu&&data.eu.country?`(${data.eu.country})`:''}:</strong>
+            <div>${(data.eu&&data.eu.range)||'—'} ${data.date?`<span class="muted">(${data.date})</span>`:''}</div>
+            <ul>${(data.eu&&data.eu.links||[]).map(u=>`<li><a target="_blank" href="${u}">${u}</a></li>`).join("")}</ul>
           </div>
         </div>
-        <div style="margin-top:8px"><strong>Подача:</strong> ${data.serving}</div>
-        <div style="margin-top:8px"><strong>Гастропары:</strong> ${data.pairing}</div>
-        <div style="margin-top:12px" class="sources"><strong>Источники:</strong>
-          <ul>${data.sources.map(s=>`<li>${s[0]} — ${s[1]} — ${s[2]} — <a href="${s[3]}" target="_blank">${s[3]}</a></li>`).join("")}</ul>
-        </div>
+        ${(data.serving||data.pairing)?`<div style="margin-top:8px"><strong>Подача:</strong> ${data.serving||'—'}</div>
+        <div style="margin-top:8px"><strong>Гастропары:</strong> ${data.pairing||'—'}</div>`:''}
       `;
-      elOut.appendChild(card);
+      container.appendChild(card);
     }
 
-    function renderManyGroups(){
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.setAttribute('data-card','groups');
-      card.innerHTML = `
-        <h2>Общая характеристика карты</h2>
-        <p>Красных 60%, белых 30%, игристых 10%. География: Италия, Франция, Аргентина, Испания. Цены: 1 200–8 500 ₽.</p>
-        <h3>Группы</h3>
-        <ol>
-          <li>Красные — Италия, 3 500–6 000 ₽</li>
-          <li>Белые — Франция, 2 800–5 200 ₽</li>
-          <li>Красные — Аргентина, 2 000–3 200 ₽</li>
-          <li>Игристые — Франция, 5 000–8 500 ₽</li>
-        </ol>
-      `;
-      elOut.appendChild(card);
+    function renderDemo(){
+      const out = document.getElementById('output'); out.innerHTML='';
+      const mode = document.getElementById('mode').value;
+      if(mode==='single'){ const d = {...mockWines[0], demo:true}; renderCard(out, d); }
+      else if(mode==='few'){ 
+        const d = {...mockWines[0], demo:true}; 
+        // мини-сравнитель (упрощённый)
+        const card = document.createElement('div'); card.className='card'; card.innerHTML='<h3 style="margin-top:0">Мини‑сравнитель (демо)</h3><div class="muted">Заполните реальные данные справа и сохраните карточки.</div>'; out.appendChild(card);
+        renderCard(out, d); renderCard(out, d); renderCard(out, d);
+      }
+      else { const card = document.createElement('div'); card.className='card'; card.innerHTML='<h3 style="margin-top:0">Группировка (демо)</h3><div class="muted">При загрузке реальной винной карты здесь будет сводка и группы.</div>'; out.appendChild(card); }
     }
 
+    document.getElementById('analyzeBtn').addEventListener('click', renderDemo);
+
+    // Local collection
+    const KEY='sommelier_collection_v1';
+    const load = ()=>{ try{ return JSON.parse(localStorage.getItem(KEY)||'[]'); }catch(e){ return []; } }
+    const save = (arr)=> localStorage.setItem(KEY, JSON.stringify(arr));
+
+    function updateList(){
+      const listBox = document.getElementById('listBox');
+      const items = load();
+      if(!items.length){ listBox.innerHTML='<div class="muted">Пока пусто. Заполните форму выше и нажмите «Добавить в коллекцию».</div>'; return; }
+      listBox.innerHTML='';
+      items.forEach((it, idx)=>{
+        const row = document.createElement('div'); row.className='list-item';
+        const left = document.createElement('div');
+        left.innerHTML = `<strong>${it.title||'Без названия'}</strong> ${it.date?`<span class="pill">${it.date}</span>`:''}`;
+        const right = document.createElement('div'); right.className='btnrow';
+        const showBtn = document.createElement('button'); showBtn.className='ghost'; showBtn.textContent='Показать'; 
+        showBtn.onclick=()=>{ const out=document.getElementById('output'); out.innerHTML=''; renderCard(out, it); window.scrollTo({top:0,behavior:'smooth'}); };
+        const delBtn = document.createElement('button'); delBtn.className='warn'; delBtn.textContent='Удалить'; delBtn.onclick=()=>{ const arr=load(); arr.splice(idx,1); save(arr); updateList(); };
+        right.appendChild(showBtn); right.appendChild(delBtn);
+        row.appendChild(left); row.appendChild(right); listBox.appendChild(row);
+      });
+    }
+    updateList();
+
+    document.getElementById('saveBtn').addEventListener('click', ()=>{
+      const data = {
+        title: el('titleInp').value.trim() || el('wineName').value.trim(),
+        vivino: { url: el('vivinoUrl').value.trim(), score: el('vivinoScore').value.trim() },
+        ru: { range: el('ruRange').value.trim(), links: el('ruLinks').value.trim().split(/\n+/).filter(Boolean) },
+        eu: { country: el('euCountry').value.trim(), range: el('euRange').value.trim(), links: el('euLinks').value.trim().split(/\n+/).filter(Boolean) },
+        serving: el('serve').value.trim(),
+        pairing: el('pair').value.trim(),
+        date: el('dateInp').value || today()
+      };
+      const arr = load(); arr.unshift(data); save(arr); updateList();
+      alert('Сохранено в коллекцию.');
+    });
+
+    document.getElementById('clearFormBtn').addEventListener('click', ()=>{
+      ['titleInp','vivinoUrl','vivinoScore','ruLinks','euCountry','euLinks','ruRange','euRange','serve','pair'].forEach(id=> el(id).value='');
+      el('dateInp').value = today();
+    });
+
+    document.getElementById('exportBtn').addEventListener('click', ()=>{
+      const data = localStorage.getItem(KEY) || '[]';
+      const blob = new Blob([data], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'sommelier_collection.json';
+      a.click(); URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('importBtn').addEventListener('click', ()=> el('importFile').click());
+    document.getElementById('importFile').addEventListener('change', (e)=>{
+      const file = e.target.files[0]; if(!file) return;
+      const fr = new FileReader();
+      fr.onload = ()=>{ try{ const arr = JSON.parse(fr.result); if(Array.isArray(arr)){ save(arr); updateList(); alert('Импортировано.'); } else alert('Неверный формат.'); }catch(err){ alert('Ошибка импорта.'); } };
+      fr.readAsText(file);
+    });
+
+    document.getElementById('wipeBtn').addEventListener('click', ()=>{
+      if(confirm('Точно удалить всю коллекцию?')){ localStorage.removeItem(KEY); updateList(); }
+    });
+
+    // PDF from current rendered cards
     document.getElementById('pdfBtn').addEventListener('click', async ()=>{
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({ unit:'pt', format:'a4' });
-      const margin = 36;
-      let y = margin;
+      const margin = 36; let y = margin;
       doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
-      doc.text('Sommelier — карточки (демо)', margin, y); y+=20;
+      doc.text('Sommelier — карточки', margin, y); y+=20;
       doc.setFont('helvetica','');
       const cards = document.querySelectorAll('[data-card]');
-      cards.forEach((card, idx)=>{
+      if(!cards.length){ const d = load(); if(d[0]){ const out=document.getElementById('output'); out.innerHTML=''; renderCard(out, d[0]); } }
+      (document.querySelectorAll('[data-card]')||[]).forEach((card, idx)=>{
         const title = card.querySelector('h2')?.textContent || 'Карточка';
         doc.setFont('helvetica','bold'); doc.text(title, margin, y); y+=16;
-        doc.setFont('helvetica',''); 
-        doc.setFontSize(11);
+        doc.setFont('helvetica',''); doc.setFontSize(11);
         const text = card.innerText.replace(/\n{2,}/g, '\n').trim();
         const lines = doc.splitTextToSize(text, 522);
         for(const line of lines){
           if(y > 806){ doc.addPage(); y = margin; }
-          doc.text(line, margin, y);
-          y += 14;
+          doc.text(line, margin, y); y += 14;
         }
-        y += 10;
-        if(y > 806 && idx < cards.length-1){ doc.addPage(); y = margin; }
+        y += 10; if(y > 806 && idx < cards.length-1){ doc.addPage(); y = margin; }
       });
-      doc.save('sommelier_cards_demo.pdf');
+      doc.save('sommelier_cards.pdf');
     });
+
+    // Demo render initial
+    renderDemo();
   </script>
 </body>
 </html>
