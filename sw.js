@@ -1,6 +1,6 @@
 self.addEventListener('install', (e)=>{
   e.waitUntil(
-   caches.open('sommelier-v1').then(cache => cache.addAll([
+   caches.open('sommelier-v2').then(cache => cache.addAll([
 '/Sommelier/',
 '/Sommelier/index.html',
 '/Sommelier/manifest.json',
